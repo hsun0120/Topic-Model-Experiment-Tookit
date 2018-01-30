@@ -5,23 +5,31 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Properties;
+import java.util.Set;
 
 import edu.stanford.nlp.io.IOUtils;
 import edu.stanford.nlp.ling.CoreAnnotations.SentencesAnnotation;
+import edu.stanford.nlp.ling.IndexedWord;
 import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.semgraph.SemanticGraph;
 import edu.stanford.nlp.semgraph.SemanticGraphEdge;
-import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.EnhancedDependenciesAnnotation;
+import edu.stanford.nlp.trees.GrammaticalRelation;
+import edu.stanford.nlp.trees.international.pennchinese.UniversalChineseGrammaticalRelations;
+import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation;
 import edu.stanford.nlp.util.CoreMap;
 
 public class DependencyGenerator {
-	public static void generate(File file) {
-		String text = DependencyGenerator.preporcess(file.getPath());
+	public void generate(File file) {
+		String text = this.preporcess(file.getPath());
 		Annotation document = new Annotation(text);
 		// Setup Chinese Properties by loading them from classpath resources
 		Properties props = new Properties();
@@ -32,19 +40,25 @@ public class DependencyGenerator {
 		}
 		StanfordCoreNLP corenlp = new StanfordCoreNLP(props);
 		corenlp.annotate(document);
-		try (FileOutputStream os = new FileOutputStream(file.getName() + ".txt")){
+		try (OutputStreamWriter writer = new OutputStreamWriter(new 
+				FileOutputStream(file.getName() + ".txt"), StandardCharsets.UTF_8)){
 			List<CoreMap> sentences = document.get(SentencesAnnotation.class);
 			for(CoreMap sentence: sentences) {
 				SemanticGraph dependencies = sentence.get
-						(EnhancedDependenciesAnnotation.class);
-				List<SemanticGraphEdge> list = dependencies.edgeListSorted();
+						(EnhancedPlusPlusDependenciesAnnotation.class);
+				ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
+				criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
+				criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
+				criteria.add(UniversalChineseGrammaticalRelations.CASE);
+				criteria.add(UniversalChineseGrammaticalRelations.MARK);
+				writer.write(this.extractPhrases(dependencies, "subject", criteria));
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
 	
-	private static String preporcess(String path) {
+	private String preporcess(String path) {
 		StringBuilder sb = new StringBuilder();
 		try(BufferedReader reader = new BufferedReader(new InputStreamReader(new 
 				FileInputStream(path), StandardCharsets.UTF_8))) {
@@ -59,21 +73,57 @@ public class DependencyGenerator {
 		return sb.toString().replace(" ", "");
 	}
 	
-	private static void extractSubject(List<SemanticGraphEdge> list) {
-		ListIterator<SemanticGraphEdge> it = list.listIterator();
-		while(it.hasNext()) {
-			SemanticGraphEdge token = it.next();
-			if(token.getRelation().getShortName().equals("nsubj")) continue;
-		}
+	private String listToPhrase(List<String> phrase) {
+		ListIterator<String> it = phrase.listIterator();
+		StringBuilder sb = new StringBuilder();
+		while(it.hasNext())
+			sb.append(it.next());
+		return sb.toString();
 	}
 	
-	private static void extractObject(List<SemanticGraphEdge> list) {
+	private String extractPhrases(SemanticGraph graph, String relation,
+			List<GrammaticalRelation> criteria) {
+		/* Get all specified relationships from graph */
+		List<SemanticGraphEdge> list = null;
+		if(relation.equals("subject")) {
+			list = graph.findAllRelns(
+					UniversalChineseGrammaticalRelations.NOMINAL_SUBJECT);
+			list.addAll(graph.findAllRelns(
+					UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT));
+		} else if(relation.equals("object")) {
+			list = graph.findAllRelns(
+					GrammaticalRelation.valueOf("dobj"));
+		}
+		if(list == null || list.size() == 0) return ""; //error condition
 		
+		ListIterator<SemanticGraphEdge> it = list.listIterator();
+		StringBuilder sb = new StringBuilder();
+		while(it.hasNext()) {
+			IndexedWord subject = it.next().getDependent();
+			Set<IndexedWord> children = graph.getChildrenWithRelns(subject, 
+					criteria);
+			if(!children.isEmpty()) {
+				IndexedWord[] words = new IndexedWord[children.size()];
+				words = children.toArray(words);
+				Arrays.sort(words, (a, b) -> a.index() > b.index() ? 1 : -1);
+				List<String> phrase = new LinkedList<>();
+				int countDown = words[words.length - 1].index();
+				for(IndexedWord word: words) { //Iterate from the end
+					if(word.index() != countDown) break; //Check continuity
+						phrase.add(0, word.originalText());
+					countDown--;
+				}
+				sb.append(this.listToPhrase(phrase));
+			}
+			sb.append(subject.word() + " ");
+		}
+		return sb.toString();
 	}
 	
 	public static void main(String[] args) {
 		File dir = new File("news");
+		DependencyGenerator gen = new DependencyGenerator();
 		for(final File file : dir.listFiles())
-			DependencyGenerator.generate(file);
+			gen.generate(file);
 	}
 }
