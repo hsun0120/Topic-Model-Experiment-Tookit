@@ -110,7 +110,7 @@ public class DependencyGenerator {
 				int countDown = words[words.length - 1].index();
 				for(IndexedWord word: words) { //Iterate from the end
 					if(word.index() != countDown) break; //Check continuity
-						phrase.add(0, word.originalText());
+						phrase.add(0, word.word());
 					countDown--;
 				}
 				sb.append(this.listToPhrase(phrase));
