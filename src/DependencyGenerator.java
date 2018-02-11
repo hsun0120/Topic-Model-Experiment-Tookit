@@ -9,6 +9,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
@@ -116,6 +117,37 @@ public class DependencyGenerator {
 				sb.append(this.listToPhrase(phrase));
 			}
 			sb.append(subject.word() + " ");
+			
+			/* Find subjects linked by conjunctions */
+			sb.append(this.findConjunctPhrases(graph, subject, criteria));
+		}
+		return sb.toString();
+	}
+	
+	private String findConjunctPhrases(SemanticGraph graph, IndexedWord parent,
+			List<GrammaticalRelation> criteria) {
+		Set<IndexedWord> children = graph.getChildrenWithReln(parent,
+				UniversalChineseGrammaticalRelations.CONJUNCT);
+		Iterator<IndexedWord> it = children.iterator();
+		StringBuilder sb = new StringBuilder();
+		while(it.hasNext()) {
+			IndexedWord candidate = it.next();
+			Set<IndexedWord> components = graph.getChildrenWithRelns(candidate, 
+					criteria);
+			if(!components.isEmpty()) {
+				IndexedWord[] words = new IndexedWord[components.size()];
+				words = components.toArray(words);
+				Arrays.sort(words, (a, b) -> a.index() > b.index() ? 1 : -1);
+				List<String> phrase = new LinkedList<>();
+				int countDown = words[words.length - 1].index();
+				for(IndexedWord word: words) { //Iterate from the end
+					if(word.index() != countDown) break; //Check continuity
+						phrase.add(0, word.word());
+					countDown--;
+				}
+				sb.append(this.listToPhrase(phrase));
+			}
+			sb.append(candidate.word() + " ");
 		}
 		return sb.toString();
 	}
