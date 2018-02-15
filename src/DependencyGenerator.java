@@ -25,33 +25,39 @@ import edu.stanford.nlp.semgraph.SemanticGraph;
 import edu.stanford.nlp.semgraph.SemanticGraphEdge;
 import edu.stanford.nlp.trees.GrammaticalRelation;
 import edu.stanford.nlp.trees.international.pennchinese.UniversalChineseGrammaticalRelations;
-import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation;
+import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.EnhancedDependenciesAnnotation;
 import edu.stanford.nlp.util.CoreMap;
 
 public class DependencyGenerator {
-	public void generate(File file) {
-		String text = this.preporcess(file.getPath());
-		Annotation document = new Annotation(text);
-		// Setup Chinese Properties by loading them from classpath resources
+	private StanfordCoreNLP corenlp;
+	
+	public DependencyGenerator() {
 		Properties props = new Properties();
 		try {
-			props.load(IOUtils.readerFromString("StanfordCoreNLP-chinese.properties"));
+			props.load(IOUtils.readerFromString("chinese.properties"));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		StanfordCoreNLP corenlp = new StanfordCoreNLP(props);
-		corenlp.annotate(document);
+		this.corenlp = new StanfordCoreNLP(props);
+	}
+	
+	public void generate(File file) {
+		String text = this.preporcess(file.getPath());
+		Annotation document = new Annotation(text);
+		this.corenlp.annotate(document);
+		
 		try (OutputStreamWriter writer = new OutputStreamWriter(new 
 				FileOutputStream(file.getName() + ".txt"), StandardCharsets.UTF_8)){
 			List<CoreMap> sentences = document.get(SentencesAnnotation.class);
 			for(CoreMap sentence: sentences) {
 				SemanticGraph dependencies = sentence.get
-						(EnhancedPlusPlusDependenciesAnnotation.class);
+						(EnhancedDependenciesAnnotation.class);
 				ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
 				criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
 				criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
 				criteria.add(UniversalChineseGrammaticalRelations.CASE);
 				criteria.add(UniversalChineseGrammaticalRelations.MARK);
+				criteria.add(UniversalChineseGrammaticalRelations.ASSOCIATIVE_MODIFIER);
 				writer.write(this.extractPhrases(dependencies, "subject", criteria));
 			}
 		} catch (IOException e) {
