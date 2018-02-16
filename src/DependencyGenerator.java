@@ -8,7 +8,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -46,23 +47,38 @@ public class DependencyGenerator {
 		Annotation document = new Annotation(text);
 		this.corenlp.annotate(document);
 		
-		try (OutputStreamWriter writer = new OutputStreamWriter(new 
-				FileOutputStream(file.getName() + ".txt"), StandardCharsets.UTF_8)){
-			List<CoreMap> sentences = document.get(SentencesAnnotation.class);
-			for(CoreMap sentence: sentences) {
-				SemanticGraph dependencies = sentence.get
-						(EnhancedDependenciesAnnotation.class);
-				ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
-				criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
-				criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
-				criteria.add(UniversalChineseGrammaticalRelations.CASE);
-				criteria.add(UniversalChineseGrammaticalRelations.MARK);
-				criteria.add(UniversalChineseGrammaticalRelations.ASSOCIATIVE_MODIFIER);
-				writer.write(this.extractPhrases(dependencies, "subject", criteria));
+		ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
+		criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
+		criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
+		criteria.add(UniversalChineseGrammaticalRelations.CASE);
+		criteria.add(UniversalChineseGrammaticalRelations.MARK);
+		criteria.add(UniversalChineseGrammaticalRelations.ASSOCIATIVE_MODIFIER);
+		
+		String[] pairs = {"S/", "V/", "O/", "SV/", "VO/", "SO/"};
+		OutputStreamWriter[] writers = new OutputStreamWriter[pairs.length];
+		for(int i = 0; i < pairs.length; i++)
+			try {
+				writers[i] = new OutputStreamWriter(new 
+						FileOutputStream(pairs[i] + file.getName()), 
+						StandardCharsets.UTF_8);
+			} catch (IOException e) {
+				e.printStackTrace();
+				return;
 			}
-		} catch (IOException e) {
-			e.printStackTrace();
+		
+		List<CoreMap> sentences = document.get(SentencesAnnotation.class);
+		for(CoreMap sentence: sentences) {
+			SemanticGraph dependencies = sentence.get
+					(EnhancedDependenciesAnnotation.class);
+			this.extractPhrases(dependencies, criteria, writers);
 		}
+		
+		for(OutputStreamWriter writer: writers)
+			try {
+				writer.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 	}
 	
 	private String preporcess(String path) {
@@ -80,82 +96,151 @@ public class DependencyGenerator {
 		return sb.toString().replace(" ", "");
 	}
 	
-	private String listToPhrase(List<String> phrase) {
-		ListIterator<String> it = phrase.listIterator();
-		StringBuilder sb = new StringBuilder();
-		while(it.hasNext())
-			sb.append(it.next());
-		return sb.toString();
-	}
-	
-	private String extractPhrases(SemanticGraph graph, String relation,
-			List<GrammaticalRelation> criteria) {
+	private void extractPhrases(SemanticGraph graph, List<GrammaticalRelation>
+	criteria, OutputStreamWriter[] writers) {
 		/* Get all specified relationships from graph */
-		List<SemanticGraphEdge> list = null;
-		if(relation.equals("subject")) {
-			list = graph.findAllRelns(
-					UniversalChineseGrammaticalRelations.NOMINAL_SUBJECT);
-			list.addAll(graph.findAllRelns(
-					UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT));
-		} else if(relation.equals("object")) {
-			list = graph.findAllRelns(
-					GrammaticalRelation.valueOf("dobj"));
-		}
-		if(list == null || list.size() == 0) return ""; //error condition
+		List<SemanticGraphEdge> list = graph.findAllRelns(
+				UniversalChineseGrammaticalRelations.NOMINAL_SUBJECT);
+		list.addAll(graph.findAllRelns(
+				UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT));
+		if(list == null || list.size() == 0) return; //error condition
 		
+		LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
 		ListIterator<SemanticGraphEdge> it = list.listIterator();
-		StringBuilder sb = new StringBuilder();
+		List<SemanticGraphEdge> allObjEdges = graph.findAllRelns
+				(UniversalChineseGrammaticalRelations.DIRECT_OBJECT);
+		HashSet<SemanticGraphEdge> allVerbObjs = new HashSet<>();
+		allVerbObjs.addAll(allObjEdges);
+		
 		while(it.hasNext()) {
-			IndexedWord subject = it.next().getDependent();
-			Set<IndexedWord> children = graph.getChildrenWithRelns(subject, 
-					criteria);
-			if(!children.isEmpty()) {
-				IndexedWord[] words = new IndexedWord[children.size()];
-				words = children.toArray(words);
-				Arrays.sort(words, (a, b) -> a.index() > b.index() ? 1 : -1);
-				List<String> phrase = new LinkedList<>();
-				int countDown = words[words.length - 1].index();
-				for(IndexedWord word: words) { //Iterate from the end
-					if(word.index() != countDown) break; //Check continuity
-						phrase.add(0, word.word());
-					countDown--;
-				}
-				sb.append(this.listToPhrase(phrase));
+			SemanticGraphEdge currEdge = it.next();
+			IndexedWord subject = currEdge.getDependent(); //Get subject
+			LinkedList<IndexedWord> result = new LinkedList<>();
+			this.DFS(graph, subject, criteria, result);
+			Collections.sort(result, (a, b) -> a.index() > b.index() ? 1 : -1);
+			ListIterator<IndexedWord> iter = result.listIterator(result.size());
+			int countDown = result.getLast().index();
+			StringBuilder sb = new StringBuilder();
+			LinkedList<String> subjects = new LinkedList<>();
+			while(iter.hasPrevious()) { //Iterate from the end
+				IndexedWord word = iter.previous();
+				if(word.index() != countDown) break; //Check continuity
+				sb.insert(0, word.word());
+				countDown--;
 			}
-			sb.append(subject.word() + " ");
+			subjects.add(sb.toString());
 			
 			/* Find subjects linked by conjunctions */
-			sb.append(this.findConjunctPhrases(graph, subject, criteria));
+			this.findConjunctPhrases(graph, subject, criteria, subjects);
+			
+			LinkedList<String> objPhrases = new LinkedList<>();
+			this.findObj(graph, subject, criteria, verbObjects, objPhrases);
+			allVerbObjs.removeAll(verbObjects);
+			this.writeOutput(subjects, objPhrases, verbObjects, writers);
+			
+			IndexedWord cop = graph.getChildWithReln(currEdge.getGovernor(), 
+					UniversalChineseGrammaticalRelations.COPULA);
+			if(cop != null)
+				try {
+					for(String phrase: subjects) {
+						writers[1].write(phrase + " ");
+						writers[2].write(currEdge.getGovernor().word() + " ");
+						writers[3].write(phrase + "-" + cop.word() + " ");
+						writers[4].write(cop.word() + "-" + currEdge.getGovernor().word() + " ");
+						writers[5].write(phrase + "-" + currEdge.getGovernor().word() + " ");
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 		}
-		return sb.toString();
+		
+		for(SemanticGraphEdge verbObject: verbObjects) {
+			try {
+				writers[1].write(verbObject.getGovernor().word() + " "); //verb
+				writers[2].write(verbObject.getDependent().word() + " "); //object
+				writers[4].write(verbObject.getGovernor().word() + "-" + 
+						verbObject.getDependent().word() + " "); //verb-object
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 	
-	private String findConjunctPhrases(SemanticGraph graph, IndexedWord parent,
-			List<GrammaticalRelation> criteria) {
+	private void writeOutput(LinkedList<String> subjects, LinkedList<String>
+	objPhrases, LinkedList<SemanticGraphEdge> verbObjects, OutputStreamWriter[]
+			writers) {
+		for(String subject: subjects) {
+			try {
+				writers[0].write(subject + " ");
+				for(SemanticGraphEdge verbObject: verbObjects) {
+					writers[1].write(verbObject.getGovernor().word() + " "); //verb
+					writers[2].write(verbObject.getDependent().word() + " "); //object
+					writers[3].write(subject + "-" + verbObject.getGovernor().word()
+							+ " "); //subject-verb
+					writers[4].write(verbObject.getGovernor().word() + "-" + 
+							verbObject.getDependent().word() + " "); //verb-object
+					writers[5].write(subject + "-" + verbObject.getDependent().word() +
+							" "); //subject-object
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
+		}
+	}
+	
+	private void findObj(SemanticGraph graph, IndexedWord parent, 
+			List<GrammaticalRelation> criteria, List<SemanticGraphEdge> verbObjects,
+			List<String> objPhrases) {
+		Iterator<SemanticGraphEdge> it = graph.incomingEdgeIterator(parent);
+		while(it.hasNext()) {
+			SemanticGraphEdge edge = it.next();
+			if(edge.getRelation().equals(UniversalChineseGrammaticalRelations.
+					DIRECT_OBJECT)) {
+				verbObjects.add(edge);
+				this.findConjunctPhrases(graph, edge.getDependent(), criteria,
+						objPhrases);
+			} else
+				this.findObj(graph, edge.getGovernor(), criteria, verbObjects,
+						objPhrases);
+		}
+	}
+	
+	private void DFS(SemanticGraph graph, IndexedWord parent, 
+			List<GrammaticalRelation> criteria, List<IndexedWord> result) {
+		result.add(parent);
+		Set<IndexedWord> children = graph.getChildrenWithRelns(parent, 
+				criteria);
+		if(children.size() == 0) return; //Base case
+		Iterator<IndexedWord> it = children.iterator();
+		while(it.hasNext()) {
+			this.DFS(graph, it.next(), criteria, result);
+		}
+	}
+	
+	private void findConjunctPhrases(SemanticGraph graph, IndexedWord parent,
+			List<GrammaticalRelation> criteria, List<String> result) {
 		Set<IndexedWord> children = graph.getChildrenWithReln(parent,
 				UniversalChineseGrammaticalRelations.CONJUNCT);
 		Iterator<IndexedWord> it = children.iterator();
-		StringBuilder sb = new StringBuilder();
 		while(it.hasNext()) {
 			IndexedWord candidate = it.next();
-			Set<IndexedWord> components = graph.getChildrenWithRelns(candidate, 
-					criteria);
-			if(!components.isEmpty()) {
-				IndexedWord[] words = new IndexedWord[components.size()];
-				words = components.toArray(words);
-				Arrays.sort(words, (a, b) -> a.index() > b.index() ? 1 : -1);
-				List<String> phrase = new LinkedList<>();
-				int countDown = words[words.length - 1].index();
-				for(IndexedWord word: words) { //Iterate from the end
-					if(word.index() != countDown) break; //Check continuity
-						phrase.add(0, word.word());
-					countDown--;
-				}
-				sb.append(this.listToPhrase(phrase));
+			LinkedList<IndexedWord> phrases = new LinkedList<>();
+			this.DFS(graph, candidate, criteria, phrases);
+			Collections.sort(phrases, (a, b) -> a.index() > b.index() ? 1 : -1);
+			ListIterator<IndexedWord> iter = phrases.listIterator(result.size());
+			int countDown = phrases.getLast().index();
+			StringBuilder sb = new StringBuilder();
+			while(iter.hasPrevious()) { //Iterate from the end
+				IndexedWord word = iter.previous();
+				if(word.index() != countDown) break; //Check continuity
+				sb.insert(0, word.word());
+				countDown--;
 			}
-			sb.append(candidate.word() + " ");
+			result.add(sb.toString());
+			
+			this.findConjunctPhrases(graph, candidate, criteria, result);
 		}
-		return sb.toString();
 	}
 	
 	public static void main(String[] args) {
