@@ -105,7 +105,6 @@ public class DependencyGenerator {
 				UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT));
 		if(list == null || list.size() == 0) return; //error condition
 		
-		LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
 		ListIterator<SemanticGraphEdge> it = list.listIterator();
 		List<SemanticGraphEdge> allObjEdges = graph.findAllRelns
 				(UniversalChineseGrammaticalRelations.DIRECT_OBJECT);
@@ -113,6 +112,7 @@ public class DependencyGenerator {
 		allVerbObjs.addAll(allObjEdges);
 		
 		while(it.hasNext()) {
+			LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
 			SemanticGraphEdge currEdge = it.next();
 			IndexedWord subject = currEdge.getDependent(); //Get subject
 			LinkedList<IndexedWord> result = new LinkedList<>();
@@ -135,7 +135,7 @@ public class DependencyGenerator {
 			
 			LinkedList<String> objPhrases = new LinkedList<>();
 			this.findObj(graph, subject, criteria, verbObjects, objPhrases);
-			allVerbObjs.removeAll(verbObjects);
+			allVerbObjs.removeAll(verbObjects); //Remove all dobj edges found
 			this.writeOutput(subjects, objPhrases, verbObjects, writers);
 			
 			IndexedWord cop = graph.getChildWithReln(currEdge.getGovernor(), 
@@ -154,7 +154,7 @@ public class DependencyGenerator {
 				}
 		}
 		
-		for(SemanticGraphEdge verbObject: verbObjects) {
+		for(SemanticGraphEdge verbObject: allVerbObjs) {
 			try {
 				writers[1].write(verbObject.getGovernor().word() + " "); //verb
 				writers[2].write(verbObject.getDependent().word() + " "); //object
@@ -172,15 +172,16 @@ public class DependencyGenerator {
 		for(String subject: subjects) {
 			try {
 				writers[0].write(subject + " ");
+				ListIterator<String> it = objPhrases.listIterator();
 				for(SemanticGraphEdge verbObject: verbObjects) {
+					String objPhrase = it.next();
 					writers[1].write(verbObject.getGovernor().word() + " "); //verb
-					writers[2].write(verbObject.getDependent().word() + " "); //object
+					writers[2].write(objPhrase + " "); //object
 					writers[3].write(subject + "-" + verbObject.getGovernor().word()
 							+ " "); //subject-verb
-					writers[4].write(verbObject.getGovernor().word() + "-" + 
-							verbObject.getDependent().word() + " "); //verb-object
-					writers[5].write(subject + "-" + verbObject.getDependent().word() +
-							" "); //subject-object
+					writers[4].write(verbObject.getGovernor().word() + "-" + objPhrase
+							+ " "); //verb-object
+					writers[5].write(subject + "-" + objPhrase + " "); //subject-object
 				}
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -198,6 +199,19 @@ public class DependencyGenerator {
 			if(edge.getRelation().equals(UniversalChineseGrammaticalRelations.
 					DIRECT_OBJECT)) {
 				verbObjects.add(edge);
+				LinkedList<IndexedWord> result = new LinkedList<>();
+				this.DFS(graph, edge.getDependent(), criteria, result);
+				Collections.sort(result, (a, b) -> a.index() > b.index() ? 1 : -1);
+				ListIterator<IndexedWord> iter = result.listIterator(result.size());
+				int countDown = result.getLast().index();
+				StringBuilder sb = new StringBuilder();
+				while(iter.hasPrevious()) { //Iterate from the end
+					IndexedWord word = iter.previous();
+					if(word.index() != countDown) break; //Check continuity
+					sb.insert(0, word.word());
+					countDown--;
+				}
+				objPhrases.add(sb.toString());
 				this.findConjunctPhrases(graph, edge.getDependent(), criteria,
 						objPhrases);
 			} else
