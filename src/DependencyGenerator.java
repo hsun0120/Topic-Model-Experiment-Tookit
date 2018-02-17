@@ -9,11 +9,13 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
@@ -110,38 +112,42 @@ public class DependencyGenerator {
 				(UniversalChineseGrammaticalRelations.DIRECT_OBJECT);
 		HashSet<SemanticGraphEdge> allVerbObjs = new HashSet<>();
 		allVerbObjs.addAll(allObjEdges);
+		HashMap<IndexedWord, String> dict = new HashMap<>();
 		
-		while(it.hasNext()) {
-			LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
-			SemanticGraphEdge currEdge = it.next();
-			IndexedWord subject = currEdge.getDependent(); //Get subject
-			LinkedList<IndexedWord> result = new LinkedList<>();
-			this.DFS(graph, subject, criteria, result);
-			Collections.sort(result, (a, b) -> a.index() > b.index() ? 1 : -1);
-			ListIterator<IndexedWord> iter = result.listIterator(result.size());
-			int countDown = result.getLast().index();
-			StringBuilder sb = new StringBuilder();
-			LinkedList<String> subjects = new LinkedList<>();
-			while(iter.hasPrevious()) { //Iterate from the end
-				IndexedWord word = iter.previous();
-				if(word.index() != countDown) break; //Check continuity
-				sb.insert(0, word.word());
-				countDown--;
-			}
-			subjects.add(sb.toString());
-			
-			/* Find subjects linked by conjunctions */
-			this.findConjunctPhrases(graph, subject, criteria, subjects);
-			
-			LinkedList<String> objPhrases = new LinkedList<>();
-			this.findObj(graph, subject, criteria, verbObjects, objPhrases);
-			allVerbObjs.removeAll(verbObjects); //Remove all dobj edges found
-			this.writeOutput(subjects, objPhrases, verbObjects, writers);
-			
-			IndexedWord cop = graph.getChildWithReln(currEdge.getGovernor(), 
-					UniversalChineseGrammaticalRelations.COPULA);
-			if(cop != null)
-				try {
+		try {
+			while(it.hasNext()) { //Extract word pairs connect to subjects
+				LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
+				SemanticGraphEdge currEdge = it.next();
+				IndexedWord subject = currEdge.getDependent(); //Get subject
+				LinkedList<IndexedWord> result = new LinkedList<>();
+				this.DFS(graph, subject, criteria, result);
+				Collections.sort(result, (a, b) -> a.index() > b.index() ? 1 : -1);
+				ListIterator<IndexedWord> iter = result.listIterator(result.size());
+				int countDown = result.getLast().index();
+				StringBuilder sb = new StringBuilder();
+				LinkedList<String> subjects = new LinkedList<>();
+				while(iter.hasPrevious()) { //Iterate from the end
+					IndexedWord word = iter.previous();
+					if(word.index() != countDown) break; //Check continuity
+					sb.insert(0, word.word());
+					countDown--;
+				}
+				subjects.add(sb.toString());
+
+				/* Find subjects linked by conjunctions */
+				this.findConjunctPhrases(graph, subject, criteria, subjects);
+
+				LinkedList<String> objPhrases = new LinkedList<>();
+				this.findObj(graph, subject, criteria, verbObjects, objPhrases);
+				allVerbObjs.removeAll(verbObjects); //Remove all dobj edges found
+				this.writeOutput(subjects, objPhrases, verbObjects, writers);
+				ListIterator<String> itPhrase = objPhrases.listIterator();
+				for(SemanticGraphEdge edge : verbObjects) //Store all verb-object pairs
+					dict.put(edge.getGovernor(), itPhrase.next());
+
+				IndexedWord cop = graph.getChildWithReln(currEdge.getGovernor(), 
+						UniversalChineseGrammaticalRelations.COPULA);
+				if(cop != null)
 					for(String phrase: subjects) {
 						writers[1].write(phrase + " ");
 						writers[2].write(currEdge.getGovernor().word() + " ");
@@ -149,21 +155,25 @@ public class DependencyGenerator {
 						writers[4].write(cop.word() + "-" + currEdge.getGovernor().word() + " ");
 						writers[5].write(phrase + "-" + currEdge.getGovernor().word() + " ");
 					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-		}
-		
-		for(SemanticGraphEdge verbObject: allVerbObjs) {
-			try {
+			}
+
+			/* Write verb and object afterward to avoid duplication */
+			Set<Entry<IndexedWord, String>> voPairs = dict.entrySet();
+			for(Entry<IndexedWord, String> entry : voPairs) {
+				writers[1].write(entry.getKey().word() + " "); //verb
+				writers[2].write(entry.getValue() + " "); //object
+			}
+
+			/* Extract the remaining verb-object pairs */
+			for(SemanticGraphEdge verbObject: allVerbObjs) {
 				writers[1].write(verbObject.getGovernor().word() + " "); //verb
 				writers[2].write(verbObject.getDependent().word() + " "); //object
 				writers[4].write(verbObject.getGovernor().word() + "-" + 
 						verbObject.getDependent().word() + " "); //verb-object
-			} catch (IOException e) {
-				e.printStackTrace();
 			}
-		}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}		
 	}
 	
 	private void writeOutput(LinkedList<String> subjects, LinkedList<String>
@@ -175,8 +185,6 @@ public class DependencyGenerator {
 				ListIterator<String> it = objPhrases.listIterator();
 				for(SemanticGraphEdge verbObject: verbObjects) {
 					String objPhrase = it.next();
-					writers[1].write(verbObject.getGovernor().word() + " "); //verb
-					writers[2].write(objPhrase + " "); //object
 					writers[3].write(subject + "-" + verbObject.getGovernor().word()
 							+ " "); //subject-verb
 					writers[4].write(verbObject.getGovernor().word() + "-" + objPhrase
@@ -186,7 +194,6 @@ public class DependencyGenerator {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			
 		}
 	}
 	
@@ -212,8 +219,12 @@ public class DependencyGenerator {
 					countDown--;
 				}
 				objPhrases.add(sb.toString());
+				int count = objPhrases.size();
 				this.findConjunctPhrases(graph, edge.getDependent(), criteria,
 						objPhrases);
+				/* Include corresponding number of verbs */
+				for(int i = 0; i < objPhrases.size() - count; i++)
+					verbObjects.add(edge);
 			} else
 				this.findObj(graph, edge.getGovernor(), criteria, verbObjects,
 						objPhrases);
