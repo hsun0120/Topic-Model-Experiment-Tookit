@@ -20,6 +20,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import edu.stanford.nlp.io.IOUtils;
+import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreAnnotations.SentencesAnnotation;
 import edu.stanford.nlp.ling.IndexedWord;
 import edu.stanford.nlp.pipeline.Annotation;
@@ -83,7 +84,7 @@ public class DependencyGenerator {
 		for(CoreMap sentence: sentences) {
 			SemanticGraph dependencies = sentence.get
 					(EnhancedDependenciesAnnotation.class);
-			this.extractPhrases(dependencies, criteria, writers);
+			this.extractDependencyPairs(dependencies, criteria, writers);
 		}
 		
 		for(OutputStreamWriter writer: writers)
@@ -109,14 +110,14 @@ public class DependencyGenerator {
 		return sb.toString().replace(" ", "");
 	}
 	
-	private void extractPhrases(SemanticGraph graph, List<GrammaticalRelation>
-	criteria, OutputStreamWriter[] writers) {
+	private void extractDependencyPairs(SemanticGraph graph,
+			List<GrammaticalRelation> criteria, OutputStreamWriter[] writers) {
 		/* Get all specified relationships from graph */
 		List<SemanticGraphEdge> list = graph.findAllRelns(
 				UniversalChineseGrammaticalRelations.NOMINAL_SUBJECT);
-		list.addAll(graph.findAllRelns(
-				UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT));
-		if(list == null || list.size() == 0) return; //error condition
+		
+		if(this.handlePassiveSentence(graph, criteria, list, writers)) return;
+		if(list.size() == 0) return; //error condition
 		
 		ListIterator<SemanticGraphEdge> it = list.listIterator();
 		List<SemanticGraphEdge> allObjEdges = graph.findAllRelns
@@ -194,6 +195,31 @@ public class DependencyGenerator {
 		}
 	}
 	
+	private void writeOutputPass(LinkedList<String> subjects, LinkedList<String>
+	verbs, LinkedList<String> objects, OutputStreamWriter[] writers) {
+		try {
+			for(String object : objects)
+				writers[2].write(object + " ");
+			
+			for(String verb : verbs) { //Write verbs and verb-object pairs
+				writers[1].write(verb + " ");
+				for(String object : objects)
+					writers[4].write(verb + "-" + object + " ");
+			}
+			
+		 /* Write subjects, subject-verb pairs, and subject-object pairs */
+			for(String subject : subjects) {
+				writers[0].write(subject + " ");
+				for(String verb : verbs)
+					writers[3].write(subject + "-" + verb + " ");
+				for(String object : objects)
+					writers[5].write(subject + "-" + object + " ");
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
 	private void findObjs(SemanticGraph graph, IndexedWord parent, 
 			List<GrammaticalRelation> criteria, List<SemanticGraphEdge> verbObjects,
 			List<String> objPhrases) {
@@ -247,18 +273,52 @@ public class DependencyGenerator {
 		}
 	}
 	
-	private void handlePassiveSentence(SemanticGraph graph, 
-			List<GrammaticalRelation> criteria, List<String> subjects) {
+	private boolean handlePassiveSentence(SemanticGraph graph, 
+			List<GrammaticalRelation> criteria, List<SemanticGraphEdge> subjects,
+			OutputStreamWriter[] writers) {
+		boolean isPassive = false;
 		/* Passive subjects should be treated as objects in normal sentence */
 		List<SemanticGraphEdge> passSbjs = graph.findAllRelns
-				(UniversalChineseGrammaticalRelations.NOMINAL_PASSIVE_SUBJECT);
-		LinkedList<String> nsubjs = new LinkedList<>();
+				(UniversalChineseGrammaticalRelations.AUX_PASSIVE_MODIFIER);
 		ListIterator<SemanticGraphEdge> it = passSbjs.listIterator();
 		while(it.hasNext()) {
-			LinkedList<SemanticGraphEdge> verbObjects = new LinkedList<>();
+			SemanticGraphEdge auxpassReln = it.next();
+			IndexedWord object = null;
+			try {
+				object = graph.getNodeByIndex(auxpassReln.getDependent().index() - 1);
+			} catch(IllegalArgumentException e) {
+				continue;
+			}
+			
+			String pos = object.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+			if(!pos.startsWith("N")) continue; //Not a passive sentence
+			
+			LinkedList<String> verbs = new LinkedList<>();
 			LinkedList<String> objPhrases = new LinkedList<>();
-			SemanticGraphEdge nsubjPassReln = it.next();
+			LinkedList<String> nsubjs = new LinkedList<>();
+			/* Find subjects (in normal sentence order) if exist */
+			IndexedWord subject = null;
+			for(int i = auxpassReln.getGovernor().index(); i > 
+			auxpassReln.getDependent().index(); i--) {
+				IndexedWord tmp = graph.getNodeByIndex(i);
+				pos = tmp.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+				if(pos.startsWith("N")) {
+					subject = tmp;
+					break;
+				}
+			}
+			if(subject != null) {
+				nsubjs.add(this.extendToPhrase(graph, subject, criteria));
+				this.findConjunctPhrases(graph, subject, criteria, nsubjs);
+			}
+			
+			this.findConjnctVerbsPass(graph, auxpassReln.getGovernor(), verbs);
+			objPhrases.add(this.extendToPhrase(graph, object, criteria));
+			this.findConjunctPhrases(graph, object, criteria, objPhrases);
+			this.writeOutputPass(nsubjs, verbs, objPhrases, writers);
+			isPassive = true;
 		}
+		return isPassive;
 	}
 	
 	private String extendToPhrase(SemanticGraph graph, IndexedWord candidate,
@@ -321,9 +381,17 @@ public class DependencyGenerator {
 				UniversalChineseGrammaticalRelations.DIRECT_OBJECT, 0, true));
 		Set<IndexedWord> set = graph.getParentsWithReln(verb, 
 				UniversalChineseGrammaticalRelations.CONJUNCT);
-		for(IndexedWord conjVerb: set) {
+		for(IndexedWord conjVerb: set)
 			this.findConjunctVerbs(graph, conjVerb, object, results);
-		}
+	}
+	
+	private void findConjnctVerbsPass(SemanticGraph graph, IndexedWord verb,
+			List<String> results) {
+		results.add(verb.word());
+		Set<IndexedWord> set = graph.getChildrenWithReln(verb, 
+				UniversalChineseGrammaticalRelations.CONJUNCT);
+		for(IndexedWord conjVerb: set)
+			this.findConjnctVerbsPass(graph, conjVerb, results);
 	}
 	
 	public static void main(String[] args) {
@@ -332,8 +400,6 @@ public class DependencyGenerator {
 		ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
 		criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
 		criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
-		criteria.add(UniversalChineseGrammaticalRelations.CASE);
-		criteria.add(UniversalChineseGrammaticalRelations.MARK);
 		criteria.add(UniversalChineseGrammaticalRelations.CLAUSAL_MODIFIER);
 		criteria.add(UniversalChineseGrammaticalRelations.ASSOCIATIVE_MODIFIER);
 		String[] outputDirs = {"S/", "V/", "O/", "SV/", "VO/", "SO/"};
