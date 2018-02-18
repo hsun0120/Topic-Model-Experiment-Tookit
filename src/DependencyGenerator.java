@@ -80,6 +80,7 @@ public class DependencyGenerator {
 				return;
 			}
 		
+		System.out.println("Processing file: " + file.getName());
 		List<CoreMap> sentences = document.get(SentencesAnnotation.class);
 		for(CoreMap sentence: sentences) {
 			SemanticGraph dependencies = sentence.get
@@ -348,19 +349,21 @@ public class DependencyGenerator {
 				}
 			}
 			
-			/* Find subjects of sentence if exist */
-			IndexedWord subject = null;
-			for(int i = bei.index(); i > 0; i--) {
-				IndexedWord tmp = graph.getNodeByIndex(i);
-				String pos = tmp.get(CoreAnnotations.PartOfSpeechAnnotation.class);
-				if(pos.startsWith("N")) {
-					subject = tmp;
-					break;
+			if(bei != null) {
+				/* Find subjects of sentence if exist */
+				IndexedWord subject = null;
+				for(int i = bei.index(); i > 0; i--) {
+					IndexedWord tmp = graph.getNodeByIndex(i);
+					String pos = tmp.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+					if(pos.startsWith("N")) {
+						subject = tmp;
+						break;
+					}
 				}
-			}
-			if(subject != null) {
-				nsubjs.add(this.extendToPhrase(graph, subject, criteria));
-				this.findConjunctPhrases(graph, subject, criteria, nsubjs);
+				if(subject != null) {
+					nsubjs.add(this.extendToPhrase(graph, subject, criteria));
+					this.findConjunctPhrases(graph, subject, criteria, nsubjs);
+				}
 			}
 			
 			objPhrases.add(this.extendToPhrase(graph, edge.getGovernor(), criteria));
@@ -444,7 +447,7 @@ public class DependencyGenerator {
 	}
 	
 	public static void main(String[] args) {
-		File dir = new File("news");
+		File dir = new File(args[0]);
 		DependencyGenerator gen = new DependencyGenerator();
 		ArrayList<GrammaticalRelation> criteria = new ArrayList<>();
 		criteria.add(UniversalChineseGrammaticalRelations.NOUN_COMPOUND);
