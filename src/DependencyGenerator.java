@@ -116,7 +116,7 @@ public class DependencyGenerator {
 		List<SemanticGraphEdge> list = graph.findAllRelns(
 				UniversalChineseGrammaticalRelations.NOMINAL_SUBJECT);
 		
-		if(this.handlePassiveSentence(graph, criteria, list, writers)) return;
+		if(this.handlePassiveSentence(graph, criteria, writers)) return;
 		if(list.size() == 0) return; //error condition
 		
 		ListIterator<SemanticGraphEdge> it = list.listIterator();
@@ -274,12 +274,18 @@ public class DependencyGenerator {
 	}
 	
 	private boolean handlePassiveSentence(SemanticGraph graph, 
-			List<GrammaticalRelation> criteria, List<SemanticGraphEdge> subjects,
-			OutputStreamWriter[] writers) {
+			List<GrammaticalRelation> criteria, OutputStreamWriter[] writers) {
 		boolean isPassive = false;
 		/* Passive subjects should be treated as objects in normal sentence */
 		List<SemanticGraphEdge> passSbjs = graph.findAllRelns
 				(UniversalChineseGrammaticalRelations.AUX_PASSIVE_MODIFIER);
+		
+		if(!passSbjs.isEmpty() && !graph.findAllRelns
+				(UniversalChineseGrammaticalRelations.COPULA).isEmpty()) {
+			this.handlePassiveCopSentence(graph, criteria, writers);
+			return true;
+		}
+		
 		ListIterator<SemanticGraphEdge> it = passSbjs.listIterator();
 		while(it.hasNext()) {
 			SemanticGraphEdge auxpassReln = it.next();
@@ -319,6 +325,49 @@ public class DependencyGenerator {
 			isPassive = true;
 		}
 		return isPassive;
+	}
+	
+	private void handlePassiveCopSentence(SemanticGraph graph, 
+			List<GrammaticalRelation> criteria, OutputStreamWriter[] writers) {
+		List<SemanticGraphEdge> edges =
+				graph.findAllRelns(UniversalChineseGrammaticalRelations.COPULA);
+		for(SemanticGraphEdge edge : edges) {
+			LinkedList<String> verb = new LinkedList<>();
+			verb.add(edge.getDependent().word());
+			LinkedList<String> objPhrases = new LinkedList<>();
+			LinkedList<String> nsubjs = new LinkedList<>();
+			
+			/* Find the position of bei */
+			IndexedWord bei = null;
+			for(int i = edge.getDependent().index(); i > 0; i--) {
+				IndexedWord tmp = graph.getNodeByIndex(i);
+				String pos = tmp.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+				if(pos.equals("SB")) {
+					bei = tmp;
+					break;
+				}
+			}
+			
+			/* Find subjects of sentence if exist */
+			IndexedWord subject = null;
+			for(int i = bei.index(); i > 0; i--) {
+				IndexedWord tmp = graph.getNodeByIndex(i);
+				String pos = tmp.get(CoreAnnotations.PartOfSpeechAnnotation.class);
+				if(pos.startsWith("N")) {
+					subject = tmp;
+					break;
+				}
+			}
+			if(subject != null) {
+				nsubjs.add(this.extendToPhrase(graph, subject, criteria));
+				this.findConjunctPhrases(graph, subject, criteria, nsubjs);
+			}
+			
+			objPhrases.add(this.extendToPhrase(graph, edge.getGovernor(), criteria));
+			this.findConjunctPhrases(graph, edge.getGovernor(), criteria, objPhrases);
+			
+			this.writeOutputPass(nsubjs, verb, objPhrases, writers);
+		}
 	}
 	
 	private String extendToPhrase(SemanticGraph graph, IndexedWord candidate,
@@ -402,6 +451,7 @@ public class DependencyGenerator {
 		criteria.add(UniversalChineseGrammaticalRelations.ADJECTIVAL_MODIFIER);
 		criteria.add(UniversalChineseGrammaticalRelations.CLAUSAL_MODIFIER);
 		criteria.add(UniversalChineseGrammaticalRelations.ASSOCIATIVE_MODIFIER);
+		criteria.add(UniversalChineseGrammaticalRelations.ORDINAL_MODIFIER);
 		String[] outputDirs = {"S/", "V/", "O/", "SV/", "VO/", "SO/"};
 		for(final File file : dir.listFiles())
 			gen.generate(file, criteria, outputDirs);
