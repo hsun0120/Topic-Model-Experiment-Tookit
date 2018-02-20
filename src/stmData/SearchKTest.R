@@ -7,8 +7,11 @@ searchKTest <- function(combType, peroid) {
   #Construct term-document matrix
   mat <- readCorpus(dtm, type = c("slam"))
   processed <- prepDocuments(mat$documents, mat$vocab, lower.thresh = 5)
+  
+  ptm <- proc.time()
   #Run searchK function
-  kresult <- searchK(processed$documents, processed$vocab, 0)
+  kresult <- searchK(processed$documents, processed$vocab, c(0))
+  print(proc.time() - ptm)
   
   #Output semantic coherence-exclusiveness graph
   fname <- paste0("diagnostic", combType, peroid, ".png")
@@ -18,3 +21,6 @@ searchKTest <- function(combType, peroid) {
   
   return("done")
 }
+
+args = commandArgs(trailingOnly=TRUE)
+searchKTest(args[1], args[2])
