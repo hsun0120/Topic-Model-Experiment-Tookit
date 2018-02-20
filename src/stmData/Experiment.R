@@ -7,22 +7,26 @@ experiment <- function(combType) {
   dtm <- read_dtm_Blei_et_al(paste0("mat", combType, ".ldac"), vocab = paste0("vocab", combType))
   #Construct term-document matrix
   mat <- readCorpus(dtm, type = c("slam"))
-  processed <- prepDocuments(mat$documents, mat$vocab, lower.thresh = 5)
-  save(processed, file=paste0(tdm, combType, ".RData"))
-    
+  
   sink(paste0("stm", combType), type = c("output"))
+  ptm <- proc.time()
+  processed <- prepDocuments(mat$documents, mat$vocab, lower.thresh = 5)
+  print("\n")
+  print(proc.time() - ptm)
+  
+  save(processed, file=paste0("tdm", combType, ".RData"))
   
   #Get profiling data
   p <- profvis({
     res <<- stm(processed$documents, processed$vocab, K = 0, init.type = "Spectral")
   }, interval=0.2)
-  htmlwidgets::saveWidget(p, paste0("profile", combType, ".html", selfcontained=FALSE)
+  htmlwidgets::saveWidget(p, paste0("profile", combType, ".html"), selfcontained=FALSE)
   
   #Get stm output and top 10 words
   print(res)
   lt <- labelTopics(res, n = 10)
   print(lt)
-  sink()
+  sink(type = "output")
   
   #Output theta matrix
   write.csv(res$theta, file=paste0("theta", combType, ".csv"))
