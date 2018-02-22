@@ -10,7 +10,7 @@ experiment <- function(combType) {
   
   sink(paste0("stm", combType), type = c("output"))
   ptm <- proc.time()
-  processed <- prepDocuments(mat$documents, mat$vocab, lower.thresh = 5)
+  processed <- prepDocuments(mat$documents, mat$vocab)
   print("\n")
   print(proc.time() - ptm)
   
