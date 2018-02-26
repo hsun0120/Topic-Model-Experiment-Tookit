@@ -25,7 +25,7 @@ import com.hankcs.hanlp.dependency.MaxEntDependencyParser;
  * @since 02-25-2018
  */
 public class HanLPDependencyExtractor {
-  static final String PUNCT= "(?<=[¡££¿£»])";
+  static final String PUNCT= "(?<=[¡££¿£» ])";
   static final String SV = "SBV";
   static final String VO = "VOB";
   static final String CORE = "HED";
@@ -43,6 +43,7 @@ public class HanLPDependencyExtractor {
 		  try {
 			  Scanner sc = new Scanner(new FileInputStream(path), 
 					  StandardCharsets.UTF_8.toString());
+			  sc.useDelimiter("\\Z");
 			  while(sc.hasNext()) {
 				  String[] sentences = sc.next().split(PUNCT);
 				  LinkedList<CoNLLWord[]> doc = new LinkedList<>();
