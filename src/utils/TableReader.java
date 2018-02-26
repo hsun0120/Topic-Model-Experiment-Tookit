@@ -17,9 +17,9 @@ import au.com.bytecode.opencsv.CSVReader;
  */
 public class TableReader {
 	public static void tableToFiles(String table, String output) {
+		String row[] = null;
 		try(CSVReader reader = new CSVReader((new InputStreamReader(new 
 				FileInputStream(table), StandardCharsets.UTF_8)))) {
-			String row[] = null;
 			while((row = reader.readNext()) != null) {
 				BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new 
 						FileOutputStream(output + "/" + row[0] + ".txt"), 

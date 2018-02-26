@@ -31,7 +31,7 @@ public class DemoParser {
 	}
 	
 	public static void main(String[] args) {
-		TableReader.tableToFiles("courtCase.csv", "courtDoc");
+		//TableReader.tableToFiles("courtCase.csv", "courtDoc");
 		DemoParser.executeStanfordParser("courtDoc");
 	}
 }
