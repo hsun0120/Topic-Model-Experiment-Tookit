@@ -13,6 +13,10 @@ import utils.TableReader;
  * @since 02-25-2018
  */
 public class DemoParser {
+	/**
+	 * Execute Stanford Parser to get dependency pairs.
+	 * @param dirPath - directory of input files
+	 */
 	public static void executeStanfordParser(String dirPath) {
 		File dir = new File(dirPath);
 		DependencyGenerator gen = new DependencyGenerator();
@@ -31,6 +35,12 @@ public class DemoParser {
 			gen.generate(file, criteria, outputDirs);
 	}
 	
+	/**
+	 * Execute one of HanLP dependency parser to get dependency pairs.
+	 * @param dirPath - directory of input files
+	 * @param option - parser options. By default, use neutral network parser;
+	 * "CRF," use CRF parser; "MaxEnt," use max entropy parser.
+	 */
 	public static void executeHanLPDependencyParser(String dirPath, String 
 			option) {
 		File dir = new File(dirPath);
@@ -41,6 +51,7 @@ public class DemoParser {
 			directory.mkdir();
 		}
 		for(final File file : dir.listFiles()) {
+			extr.buildDep(file.getPath(), option);
 			extr.getSingleComp(outputDirs[0], file.getName(), "S");
 			extr.getSingleComp(outputDirs[1], file.getName(), "V");
 			extr.getSingleComp(outputDirs[2], file.getName(), "O");
