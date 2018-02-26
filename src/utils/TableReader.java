@@ -10,6 +10,11 @@ import java.nio.charset.StandardCharsets;
 
 import au.com.bytecode.opencsv.CSVReader;
 
+/**
+ * A simple class to extract columns from a table to text files.
+ * @author hsun9
+ * @since 02-25-2018
+ */
 public class TableReader {
 	public static void tableToFiles(String table, String output) {
 		try(CSVReader reader = new CSVReader((new InputStreamReader(new 
