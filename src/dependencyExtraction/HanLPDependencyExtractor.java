@@ -12,11 +12,12 @@ import java.util.LinkedList;
 import java.util.ListIterator;
 import java.util.Scanner;
 
-import com.hankcs.hanlp.HanLP;
 import com.hankcs.hanlp.corpus.dependency.CoNll.CoNLLSentence;
 import com.hankcs.hanlp.corpus.dependency.CoNll.CoNLLWord;
 import com.hankcs.hanlp.dependency.CRFDependencyParser;
+import com.hankcs.hanlp.dependency.IDependencyParser;
 import com.hankcs.hanlp.dependency.MaxEntDependencyParser;
+import com.hankcs.hanlp.dependency.nnparser.NeuralNetworkDependencyParser;
 
 /**
  * A class that generates and output dependency pairs based on HanLP
@@ -35,14 +36,17 @@ public class HanLPDependencyExtractor {
   /**
    * Generate dependency graphs from input file.
    * @param path - path to input file
-   * @param parser - name of parser, by default use neural network dependency
+   * @param option - name of parser, by default use neural network dependency
    * parser; use "CRF" to use CRF dependency parser; use "MaxEntropy" to use
    * max entropy dependency parser.
    */
-  public void buildDep(String path, String parser) {
+  @SuppressWarnings("deprecation")
+	public void buildDep(String path, String option) {
 		  try {
 			  Scanner sc = new Scanner(new FileInputStream(path), 
 					  StandardCharsets.UTF_8.toString());
+			  IDependencyParser parser = 
+					  new NeuralNetworkDependencyParser().enableDeprelTranslator(false);
 			  sc.useDelimiter("\\Z");
 			  while(sc.hasNext()) {
 				  String[] sentences = sc.next().split(PUNCT);
@@ -51,12 +55,17 @@ public class HanLPDependencyExtractor {
 				  /* Add dependency graph of each sentence*/
 				  for(int j = 0; j < sentences.length; j++) {
 				  	CoNLLSentence sentence = null;
-				  	if(parser.equals("CRF"))
-				  		sentence = CRFDependencyParser.compute(sentences[j]);
-				  	else if(parser.equals("MaxEntropy"))
-				  		sentence = MaxEntDependencyParser.compute(sentences[j]);
+				  	if(option.equals("CRF")) {
+				  		parser = new CRFDependencyParser().enableDeprelTranslator(false);
+				  		sentence = parser.parse(sentences[j]);
+				  	}
+				  	else if(option.equals("MaxEntropy")) {
+				  		parser = new MaxEntDependencyParser().
+				  				enableDeprelTranslator(false);
+				  		sentence = parser.parse(sentences[j]);
+				  	}
 				  	else
-				  		sentence = HanLP.parseDependency(sentences[j]);
+				  		sentence = parser.parse(sentences[j]);
 					  CoNLLWord[] wordArray = sentence.getWordArray();
 					  doc.add(wordArray);
 				  }
