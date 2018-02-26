@@ -38,8 +38,9 @@ public class DemoParser {
 	/**
 	 * Execute one of HanLP dependency parser to get dependency pairs.
 	 * @param dirPath - directory of input files
-	 * @param option - parser options. By default, use neutral network parser;
-	 * "CRF," use CRF parser; "MaxEnt," use max entropy parser.
+	 * @param option - name of segmenter, by default use neural network
+   * dependency parser with NLPTokenizer; use "index" to use IndexTokenizer;
+   * use "NShort" to use NShortSegment; use "CRF" to use CRF dependency parser.
 	 */
 	public static void executeHanLPDependencyParser(String dirPath, String 
 			option) {
@@ -64,6 +65,6 @@ public class DemoParser {
 	public static void main(String[] args) {
 		//TableReader.tableToFiles("courtCase.csv", "courtDoc");
 		//DemoParser.executeStanfordParser("courtDoc");
-		DemoParser.executeHanLPDependencyParser("courtDoc", "NN");
+		DemoParser.executeHanLPDependencyParser("courtDoc", "NLP");
 	}
 }

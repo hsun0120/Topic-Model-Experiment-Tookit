@@ -18,6 +18,10 @@ import com.hankcs.hanlp.dependency.CRFDependencyParser;
 import com.hankcs.hanlp.dependency.IDependencyParser;
 import com.hankcs.hanlp.dependency.MaxEntDependencyParser;
 import com.hankcs.hanlp.dependency.nnparser.NeuralNetworkDependencyParser;
+import com.hankcs.hanlp.seg.CRF.CRFSegment;
+import com.hankcs.hanlp.seg.NShort.NShortSegment;
+import com.hankcs.hanlp.tokenizer.IndexTokenizer;
+import com.hankcs.hanlp.tokenizer.NLPTokenizer;
 
 /**
  * A class that generates and output dependency pairs based on HanLP
@@ -36,11 +40,10 @@ public class HanLPDependencyExtractor {
   /**
    * Generate dependency graphs from input file.
    * @param path - path to input file
-   * @param option - name of parser, by default use neural network dependency
-   * parser; use "CRF" to use CRF dependency parser; use "MaxEntropy" to use
-   * max entropy dependency parser.
+   * @param option - name of segmenter, by default use neural network
+   * dependency parser with NLPTokenizer; use "index" to use IndexTokenizer;
+   * use "NShort" to use NShortSegment; use "CRF" to use CRF dependency parser.
    */
-  @SuppressWarnings("deprecation")
 	public void buildDep(String path, String option) {
 		  try {
 			  Scanner sc = new Scanner(new FileInputStream(path), 
@@ -48,24 +51,21 @@ public class HanLPDependencyExtractor {
 			  IDependencyParser parser = 
 					  new NeuralNetworkDependencyParser().enableDeprelTranslator(false);
 			  sc.useDelimiter("\\Z");
+			  if(option.equals("index"))
+			  	parser.setSegment(IndexTokenizer.SEGMENT);
+			  else if(option.equals("NShort"))
+			  	parser.setSegment(new NShortSegment());
+			  else if(option.equals("CRF"))
+			  	parser.setSegment(new CRFSegment());
+			  else
+			  	parser.setSegment(NLPTokenizer.SEGMENT);
 			  while(sc.hasNext()) {
 				  String[] sentences = sc.next().split(PUNCT);
 				  LinkedList<CoNLLWord[]> doc = new LinkedList<>();
 				  this.doc = doc;
 				  /* Add dependency graph of each sentence*/
 				  for(int j = 0; j < sentences.length; j++) {
-				  	CoNLLSentence sentence = null;
-				  	if(option.equals("CRF")) {
-				  		parser = new CRFDependencyParser().enableDeprelTranslator(false);
-				  		sentence = parser.parse(sentences[j]);
-				  	}
-				  	else if(option.equals("MaxEntropy")) {
-				  		parser = new MaxEntDependencyParser().
-				  				enableDeprelTranslator(false);
-				  		sentence = parser.parse(sentences[j]);
-				  	}
-				  	else
-				  		sentence = parser.parse(sentences[j]);
+				  	CoNLLSentence sentence = parser.parse(sentences[j]);
 					  CoNLLWord[] wordArray = sentence.getWordArray();
 					  doc.add(wordArray);
 				  }
@@ -116,8 +116,8 @@ public class HanLPDependencyExtractor {
   				}
   			}
   			writer.write("\n");
-  			writer.close();
   		}
+  		writer.close();
   	}catch (UnsupportedEncodingException | FileNotFoundException e) {
   		e.printStackTrace();
   	}
