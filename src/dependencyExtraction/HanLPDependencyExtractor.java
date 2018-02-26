@@ -14,9 +14,7 @@ import java.util.Scanner;
 
 import com.hankcs.hanlp.corpus.dependency.CoNll.CoNLLSentence;
 import com.hankcs.hanlp.corpus.dependency.CoNll.CoNLLWord;
-import com.hankcs.hanlp.dependency.CRFDependencyParser;
 import com.hankcs.hanlp.dependency.IDependencyParser;
-import com.hankcs.hanlp.dependency.MaxEntDependencyParser;
 import com.hankcs.hanlp.dependency.nnparser.NeuralNetworkDependencyParser;
 import com.hankcs.hanlp.seg.CRF.CRFSegment;
 import com.hankcs.hanlp.seg.NShort.NShortSegment;
@@ -65,7 +63,7 @@ public class HanLPDependencyExtractor {
 				  this.doc = doc;
 				  /* Add dependency graph of each sentence*/
 				  for(int j = 0; j < sentences.length; j++) {
-				  	CoNLLSentence sentence = parser.parse(sentences[j]);
+				  	CoNLLSentence sentence = parser.parse(sentences[j].trim());
 					  CoNLLWord[] wordArray = sentence.getWordArray();
 					  doc.add(wordArray);
 				  }
