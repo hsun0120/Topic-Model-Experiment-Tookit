@@ -10,7 +10,10 @@ Tookit for text analysis using stm. The tools including dependency extractors th
 1. Create six directories named "S", "V", "O", "SV", "VO", and "SO" under classpath.
 2. Create a directory under classpath and put all text files in it.
 3. Execute dependency generator, it takes the name of source directory as command line argument.
-4. Run Dependency generator, and dependency pairs will be generated under those 6 directories.
+4. Run Dependency generator, and dependency pairs will be generated under those 6 directories. For example, if the source directory named "courtDoc", run:
+   ```
+   java DependencyGenerator courtDoc
+   ```
 
 ## Execute Topic Model:
 1. Run LDACMatrix to create term-document matrix and vocab for stm. LDACMatrix takes one argument, the base directory that contains those 6 directories. Matrix matXXX.dac and vocabXXX will be created under classpath.
