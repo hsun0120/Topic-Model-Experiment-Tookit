@@ -20,13 +20,16 @@ public class TableReader {
 		String row[] = null;
 		try(CSVReader reader = new CSVReader((new InputStreamReader(new 
 				FileInputStream(table), StandardCharsets.UTF_8)))) {
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new 
+					FileOutputStream("compensation.txt"), StandardCharsets.UTF_8));
+			int count = 0;
 			while((row = reader.readNext()) != null) {
-				BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new 
-						FileOutputStream(output + "/" + row[0] + ".txt"), 
-						StandardCharsets.UTF_8));
-				writer.write(row[6]); //Write original text
-				writer.close();
+				if(row.length != 3 || !row[1].trim().equals("Åâ³¥°¸¼þ")) continue;
+				writer.write(row[2]); //Write original text
+				count++;
+				if(count == 200) break;
 			}
+			writer.close();
 		} catch(IOException e) {
 			e.printStackTrace();
 		}

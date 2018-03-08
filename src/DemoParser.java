@@ -63,8 +63,8 @@ public class DemoParser {
 	}
 	
 	public static void main(String[] args) {
-		//TableReader.tableToFiles("courtCase.csv", "courtDoc");
+		TableReader.tableToFiles("courtDoc.csv", "courtDoc");
 		//DemoParser.executeStanfordParser("courtDoc");
-		DemoParser.executeHanLPDependencyParser("courtDoc", "NLP");
+		//DemoParser.executeHanLPDependencyParser("courtDoc", "CRF");
 	}
 }
